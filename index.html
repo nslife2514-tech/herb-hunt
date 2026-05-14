@@ -1,0 +1,886 @@
+<!DOCTYPE html>
+<html lang="th">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>ตามล่าสมุนไพร — สแกน QR</title>
+<link href="https://fonts.googleapis.com/css2?family=Mali:wght@400;500;700&display=swap" rel="stylesheet">
+<script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; -webkit-tap-highlight-color: transparent; }
+  html, body {
+    height: 100%;
+    font-family: 'Mali', sans-serif;
+    background: #f0f4e8;
+    color: #2d3a1f;
+    overflow: hidden;
+  }
+  body {
+    display: flex;
+    flex-direction: column;
+    height: 100vh;
+    height: 100dvh;
+  }
+  header {
+    background: linear-gradient(135deg, #4a7c2e, #6ba84a);
+    color: white;
+    padding: 10px 14px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.15);
+    z-index: 5;
+  }
+  .title-row {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    margin-bottom: 6px;
+  }
+  .title-row h1 {
+    font-size: 1.1rem;
+    font-weight: 700;
+  }
+  .title-row .badge {
+    background: rgba(255,255,255,0.25);
+    padding: 4px 10px;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 700;
+  }
+  .progress-bar {
+    height: 8px;
+    background: rgba(255,255,255,0.25);
+    border-radius: 999px;
+    overflow: hidden;
+  }
+  .progress-fill {
+    height: 100%;
+    background: #ffd966;
+    border-radius: 999px;
+    transition: width 0.4s ease;
+  }
+  #camera-wrap {
+    flex: 1 1 auto;
+    position: relative;
+    background: #000;
+    overflow: hidden;
+    min-height: 280px;
+  }
+  #reader {
+    width: 100%;
+    height: 100%;
+  }
+  #reader video {
+    width: 100% !important;
+    height: 100% !important;
+    object-fit: cover !important;
+  }
+  #reader__dashboard, #reader__scan_region img, #reader__status_span,
+  #reader__camera_selection, #reader__filescan_input,
+  #reader__dashboard_section_csr, #reader__dashboard_section_swaplink {
+    display: none !important;
+  }
+  #reader__scan_region {
+    background: transparent !important;
+    min-height: auto !important;
+  }
+  .scan-overlay {
+    position: absolute;
+    inset: 0;
+    pointer-events: none;
+    z-index: 3;
+  }
+  .scan-frame {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 65vmin;
+    max-width: 280px;
+    aspect-ratio: 1;
+    border: 3px solid rgba(255,255,255,0.7);
+    border-radius: 24px;
+    box-shadow: 0 0 0 100vmax rgba(0,0,0,0.45);
+  }
+  .scan-frame::before, .scan-frame::after,
+  .scan-frame > div::before, .scan-frame > div::after {
+    content: '';
+    position: absolute;
+    width: 30px;
+    height: 30px;
+    border: 4px solid #ffd966;
+  }
+  .scan-frame::before { top: -3px; left: -3px; border-right: 0; border-bottom: 0; border-top-left-radius: 22px; }
+  .scan-frame::after { top: -3px; right: -3px; border-left: 0; border-bottom: 0; border-top-right-radius: 22px; }
+  .scan-frame > div { position: absolute; inset: 0; }
+  .scan-frame > div::before { bottom: -3px; left: -3px; border-right: 0; border-top: 0; border-bottom-left-radius: 22px; }
+  .scan-frame > div::after { bottom: -3px; right: -3px; border-left: 0; border-top: 0; border-bottom-right-radius: 22px; }
+  .scan-hint {
+    position: absolute;
+    bottom: 14px;
+    left: 50%;
+    transform: translateX(-50%);
+    color: white;
+    background: rgba(0,0,0,0.6);
+    padding: 8px 18px;
+    border-radius: 999px;
+    font-size: 0.95rem;
+    font-weight: 500;
+    text-align: center;
+    white-space: nowrap;
+    pointer-events: none;
+  }
+  .scan-hint.error { background: #c44; }
+  #drawer {
+    background: #fff;
+    border-radius: 22px 22px 0 0;
+    box-shadow: 0 -4px 20px rgba(0,0,0,0.15);
+    padding: 8px 0 0 0;
+    flex-shrink: 0;
+    max-height: 45vh;
+    display: flex;
+    flex-direction: column;
+    transform: translateY(calc(100% - 70px));
+    transition: transform 0.32s cubic-bezier(.32,.72,0,1);
+    z-index: 4;
+  }
+  #drawer.open {
+    transform: translateY(0);
+  }
+  .drawer-handle {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    padding: 4px 0 8px 0;
+    cursor: pointer;
+    flex-shrink: 0;
+  }
+  .drawer-handle .grip {
+    width: 44px;
+    height: 5px;
+    background: #c8d4b6;
+    border-radius: 999px;
+    margin-bottom: 8px;
+  }
+  .drawer-handle .label {
+    font-weight: 700;
+    color: #4a7c2e;
+    font-size: 1rem;
+  }
+  .drawer-handle .label .count {
+    background: #4a7c2e;
+    color: white;
+    padding: 2px 9px;
+    border-radius: 999px;
+    margin-left: 6px;
+    font-size: 0.85rem;
+  }
+  .collection {
+    overflow-y: auto;
+    padding: 10px 14px 24px 14px;
+    -webkit-overflow-scrolling: touch;
+  }
+  .grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(95px, 1fr));
+    gap: 10px;
+  }
+  .card {
+    background: #f3f7eb;
+    border: 2px dashed #b9cd9b;
+    border-radius: 14px;
+    padding: 10px 6px;
+    text-align: center;
+    aspect-ratio: 1 / 1.15;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 4px;
+    cursor: pointer;
+    transition: transform 0.15s ease;
+  }
+  .card.found {
+    background: #e8f5d8;
+    border: 2px solid #6ba84a;
+  }
+  .card.found:active {
+    transform: scale(0.96);
+  }
+  .card .emoji {
+    font-size: 2rem;
+    line-height: 1;
+  }
+  .card .qmark {
+    font-size: 1.4rem;
+    color: #b9cd9b;
+    font-weight: 700;
+  }
+  .card .name {
+    font-size: 0.78rem;
+    font-weight: 700;
+    color: #6b7960;
+    line-height: 1.1;
+  }
+  .card.found .name {
+    color: #2d3a1f;
+  }
+  .modal-overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,0.65);
+    z-index: 100;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 16px;
+    animation: fadein 0.25s ease;
+  }
+  .modal-overlay.show { display: flex; }
+  @keyframes fadein { from { opacity: 0; } to { opacity: 1; } }
+  .modal {
+    background: white;
+    border-radius: 22px;
+    width: 100%;
+    max-width: 420px;
+    max-height: 88vh;
+    overflow-y: auto;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.4);
+    animation: pop 0.32s cubic-bezier(.34,1.56,.64,1);
+  }
+  @keyframes pop { from { transform: scale(0.85); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .modal-header {
+    background: linear-gradient(135deg, #6ba84a, #4a7c2e);
+    color: white;
+    padding: 18px 20px 14px 20px;
+    border-radius: 22px 22px 0 0;
+    text-align: center;
+    position: relative;
+  }
+  .modal-header .close {
+    position: absolute;
+    top: 12px;
+    right: 14px;
+    background: rgba(255,255,255,0.25);
+    border: 0;
+    color: white;
+    width: 30px;
+    height: 30px;
+    border-radius: 50%;
+    font-size: 1.1rem;
+    cursor: pointer;
+    font-family: inherit;
+  }
+  .modal-header .badge {
+    display: inline-block;
+    background: #ffd966;
+    color: #5a3a00;
+    padding: 4px 12px;
+    border-radius: 999px;
+    font-size: 0.85rem;
+    font-weight: 700;
+    margin-bottom: 8px;
+  }
+  .modal-emoji {
+    font-size: 3.5rem;
+    margin: 8px 0 4px 0;
+  }
+  .modal-name {
+    font-size: 1.4rem;
+    font-weight: 700;
+  }
+  .modal-sci {
+    font-style: italic;
+    opacity: 0.85;
+    font-size: 0.85rem;
+    margin-top: 2px;
+  }
+  .modal-body {
+    padding: 16px 20px 22px 20px;
+  }
+  .modal-section {
+    margin-bottom: 12px;
+  }
+  .modal-section h3 {
+    font-size: 0.85rem;
+    color: #4a7c2e;
+    text-transform: uppercase;
+    letter-spacing: 0.08em;
+    margin-bottom: 4px;
+    font-weight: 700;
+  }
+  .modal-section p {
+    font-size: 0.95rem;
+    line-height: 1.5;
+    color: #2d3a1f;
+  }
+  .modal-section em {
+    background: #fff3cd;
+    font-style: normal;
+    padding: 0 4px;
+    border-radius: 4px;
+    font-weight: 500;
+  }
+  .modal-fact {
+    background: #f3f7eb;
+    border-left: 4px solid #6ba84a;
+    padding: 10px 12px;
+    border-radius: 6px;
+    font-size: 0.9rem;
+    color: #4a5a3a;
+    line-height: 1.5;
+  }
+  .toast {
+    position: fixed;
+    top: 20px;
+    left: 50%;
+    transform: translateX(-50%) translateY(-100px);
+    background: #2d3a1f;
+    color: white;
+    padding: 10px 18px;
+    border-radius: 999px;
+    box-shadow: 0 6px 20px rgba(0,0,0,0.3);
+    z-index: 200;
+    transition: transform 0.32s cubic-bezier(.34,1.56,.64,1);
+    font-size: 0.95rem;
+    font-weight: 500;
+    max-width: 90vw;
+    text-align: center;
+  }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .toast.success { background: #4a7c2e; }
+  .toast.warn { background: #c25b3f; }
+  .perm-overlay {
+    position: fixed;
+    inset: 0;
+    background: linear-gradient(160deg, #4a7c2e, #2d3a1f);
+    color: white;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    text-align: center;
+    padding: 28px;
+    z-index: 1000;
+  }
+  .perm-overlay .leaf {
+    font-size: 4rem;
+    margin-bottom: 16px;
+  }
+  .perm-overlay h2 {
+    font-size: 1.5rem;
+    margin-bottom: 10px;
+  }
+  .perm-overlay p {
+    font-size: 1rem;
+    line-height: 1.5;
+    margin-bottom: 22px;
+    opacity: 0.92;
+  }
+  .perm-overlay button {
+    background: #ffd966;
+    color: #5a3a00;
+    border: 0;
+    padding: 14px 30px;
+    border-radius: 999px;
+    font-family: inherit;
+    font-size: 1.05rem;
+    font-weight: 700;
+    cursor: pointer;
+    box-shadow: 0 4px 14px rgba(0,0,0,0.25);
+  }
+  .reset-btn {
+    background: transparent;
+    border: 1px solid #c8d4b6;
+    color: #6b7960;
+    padding: 8px 18px;
+    border-radius: 999px;
+    font-family: inherit;
+    font-size: 0.85rem;
+    cursor: pointer;
+    margin: 14px auto 4px auto;
+    display: block;
+  }
+  .reveal-flash {
+    position: fixed;
+    inset: 0;
+    background: radial-gradient(circle, rgba(255,217,102,0.6) 0%, transparent 70%);
+    z-index: 90;
+    pointer-events: none;
+    animation: flash 0.7s ease-out forwards;
+  }
+  @keyframes flash {
+    0% { opacity: 0; transform: scale(0.8); }
+    30% { opacity: 1; transform: scale(1); }
+    100% { opacity: 0; transform: scale(1.4); }
+  }
+</style>
+</head>
+<body>
+
+<div class="perm-overlay" id="permOverlay">
+  <div class="leaf">🌿</div>
+  <h2>ตามล่าสมุนไพร</h2>
+  <p>เดินสำรวจในสวน แล้ว<strong>ใช้กล้องมือถือ</strong>สแกน QR ที่ป้ายสมุนไพรแต่ละต้น เพื่อเก็บเข้าคอลเลกชัน!</p>
+  <button id="startBtn">🌿 เริ่มเล่น</button>
+  <button id="startWithCamBtn" style="background:rgba(255,255,255,0.15);color:white;border:1px solid rgba(255,255,255,0.4);margin-top:10px;font-size:0.9rem;padding:10px 22px">📷 เปิดกล้องในแอป (ไม่จำเป็น)</button>
+</div>
+
+<header>
+  <div class="title-row">
+    <h1>🌿 ตามล่าสมุนไพร</h1>
+    <div class="badge"><span id="progressText">0/10</span></div>
+  </div>
+  <div class="progress-bar">
+    <div class="progress-fill" id="progressFill" style="width:0%"></div>
+  </div>
+</header>
+
+<div id="camera-wrap">
+  <div id="reader"></div>
+  <div class="scan-overlay">
+    <div class="scan-frame"><div></div></div>
+    <div class="scan-hint" id="scanHint">📷 ส่อง QR ที่ป้ายสมุนไพร</div>
+  </div>
+</div>
+
+<div id="drawer">
+  <div class="drawer-handle" id="drawerHandle">
+    <div class="grip"></div>
+    <div class="label">📔 สมุดสะสม <span class="count" id="drawerCount">0/10</span></div>
+  </div>
+  <div class="collection">
+    <div class="grid" id="grid"></div>
+    <button class="reset-btn" id="resetBtn">🔄 เริ่มใหม่</button>
+  </div>
+</div>
+
+<div class="modal-overlay" id="modalOverlay">
+  <div class="modal">
+    <div class="modal-header">
+      <button class="close" id="modalClose">✕</button>
+      <div class="badge" id="modalBadge">🎉 ค้นพบใหม่!</div>
+      <div class="modal-emoji" id="modalEmoji">🌿</div>
+      <div class="modal-name" id="modalName">—</div>
+      <div class="modal-sci" id="modalSci">—</div>
+    </div>
+    <div class="modal-body">
+      <div class="modal-section">
+        <h3>ลักษณะ</h3>
+        <p id="modalDesc">—</p>
+      </div>
+      <div class="modal-section">
+        <h3>สรรพคุณ</h3>
+        <p id="modalProps">—</p>
+      </div>
+      <div class="modal-section">
+        <h3>การใช้งาน</h3>
+        <p id="modalUses">—</p>
+      </div>
+      <div class="modal-fact" id="modalFact">—</div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast">—</div>
+
+<script>
+  // ============================================================
+  // 🌿 ข้อมูลสมุนไพร — แก้/เพิ่มที่นี่ (รองรับสูงสุด ~50 ชนิด)
+  // ============================================================
+  const herbs = [
+    {
+      id: 1,
+      name_th: "มะเดื่อฝรั่ง",
+      name_sci: "Ficus carica",
+      icon: "🍐",
+      desc: "ต้นไม้ใบใหญ่<em>หยักลึก 3–5 แฉก</em> ผลรูปหยดน้ำสีเขียวเปลี่ยนเป็นม่วงเมื่อสุก",
+      props: "บำรุงเลือด ระบายอ่อน แก้ท้องผูก ลดคอเลสเตอรอล",
+      uses: "ทานผลสด ตากแห้ง ทำแยม ใบต้มเป็นชา",
+      fact: "เป็นพืชผลแรกๆ ที่มนุษย์ปลูก — มีหลักฐานปลูกในตะวันออกกลางเมื่อ 11,000 ปีก่อน"
+    },
+    {
+      id: 2,
+      name_th: "หญ้าปักกิ่ง",
+      name_sci: "Murdannia loriformis",
+      icon: "🌾",
+      desc: "หญ้าใบยาวเรียว สีเขียวเข้ม<em>เกลี้ยงเป็นมัน</em> ขึ้นเป็นกอใต้ร่มไม้ใหญ่",
+      props: "ต้านอนุมูลอิสระ บำรุงร่างกาย แก้ไข้ ใช้เสริมการรักษามะเร็ง",
+      uses: "ต้มน้ำดื่ม คั้นน้ำสด แช่เย็นดื่มแก้ร้อนใน",
+      fact: "หมอแผนไทยนิยมใช้ช่วยรักษาผู้ป่วยมะเร็งมานานหลายสิบปี"
+    },
+    {
+      id: 3,
+      name_th: "ตะไคร้",
+      name_sci: "Cymbopogon citratus",
+      icon: "🌿",
+      desc: "ลำต้นเป็นกอ ใบยาวเรียวคล้ายหญ้า โคนต้น<em>กลิ่นมะนาว</em>หอมสดชื่น",
+      props: "ขับลม แก้ปวดท้อง ลดความดัน ไล่ยุง",
+      uses: "ต้มยำ ต้มข่าไก่ น้ำสมุนไพร น้ำมันหอมระเหย",
+      fact: "น้ำมันตะไคร้หอมไล่ยุงได้ผลกว่ายาทากันยุงสังเคราะห์หลายชนิด"
+    },
+    {
+      id: 4,
+      name_th: "ย่านาง",
+      name_sci: "Tiliacora triandra",
+      icon: "🍃",
+      desc: "ไม้เลื้อยใบรูปหัวใจสีเขียวเข้ม ใบ<em>คั้นได้น้ำสีเขียว</em>เข้มเป็นเอกลักษณ์",
+      props: "ดับพิษไข้ บำรุงเลือด ขับสารพิษ ลดความร้อนในร่างกาย",
+      uses: "น้ำใบย่านาง แกงหน่อไม้ ขนมจีนน้ำยา ซุปอีสาน",
+      fact: "น้ำใบย่านางเย็นๆ เป็นภูมิปัญญาอีสานสำหรับแก้ร้อนในหน้าร้อน"
+    },
+    {
+      id: 5,
+      name_th: "อังกาบหนู",
+      name_sci: "Barleria prionitis",
+      icon: "🌱",
+      desc: "ไม้พุ่มขนาดเล็ก ใบสีเขียวเข้มเป็นมัน <em>มีหนามที่โคนใบ</em> ดอกสีเหลือง",
+      props: "ต้านไวรัส แก้ไข้ บำรุงสมอง เสริมภูมิคุ้มกัน",
+      uses: "ต้มน้ำดื่ม แคปซูลสมุนไพร ตำรายาล้านนาใช้รักษาเสริมมะเร็ง",
+      fact: "เป็นสมุนไพรที่ฮิตในกระแสยุคใหม่ — เคยเป็นที่นิยมช่วงโรคระบาด"
+    },
+    {
+      id: 6,
+      name_th: "โรสแมรี่",
+      name_sci: "Salvia rosmarinus",
+      icon: "🌲",
+      desc: "ไม้พุ่มเล็ก ใบ<em>ยาวเรียวคล้ายเข็มสน</em> สีเขียวเข้ม กลิ่นหอมเย็นเฉพาะตัว",
+      props: "ปรับปรุงความจำ ลดความเครียด ต้านอนุมูลอิสระ บำรุงผิว",
+      uses: "ปรุงอาหารฝรั่ง ชาโรสแมรี่ น้ำมันหอมระเหย แต่งกลิ่นของหวาน",
+      fact: "ในยุโรปโบราณเป็นสัญลักษณ์ของ 'ความจำ' — นักเรียนโรมันเหน็บใบในผมก่อนสอบ"
+    },
+    {
+      id: 7,
+      name_th: "ขมิ้นชัน",
+      name_sci: "Curcuma longa",
+      icon: "🟡",
+      desc: "ไม้ล้มลุก ใบใหญ่ยาวคล้ายกล้วย เหง้าใต้ดิน<em>สีเหลืองส้มจัด</em> มีกลิ่นหอมเฉพาะ",
+      props: "ลดการอักเสบ บำรุงกระเพาะอาหาร แก้ท้องอืด ต้านอนุมูลอิสระ บำรุงผิว",
+      uses: "ฝานสด ตำเป็นผงชง แกงเหลือง ผัดไทย พอกหน้าและผิว",
+      fact: "เคอร์คูมิน (สารสีเหลืองในขมิ้น) ดูดซึมดีขึ้น 2000% เมื่อกินคู่กับพริกไทยดำ"
+    },
+    {
+      id: 8,
+      name_th: "เสลดพังพอนตัวเมีย (พญายอ)",
+      name_sci: "Clinacanthus nutans",
+      icon: "🌿",
+      desc: "ไม้พุ่มเตี้ย ใบเรียวยาวเป็นมัน <em>สีเขียวเข้ม</em> ดอกสีส้มแดงห้อยลง",
+      props: "แก้พิษงู แมลงสัตว์กัดต่อย แก้เริม งูสวัด แผลร้อนใน ลดอักเสบ",
+      uses: "ตำใบสดพอกแผล ต้มดื่ม ทำครีมทาเริม/งูสวัด",
+      fact: "ใบสดตำพอกแผลงูกัดเป็นภูมิปัญญาไทยโบราณ — ใช้ในตำรับยาหลวงตั้งแต่สมัยอยุธยา"
+    },
+    {
+      id: 9,
+      name_th: "หมากเม่า",
+      name_sci: "Antidesma thwaitesianum",
+      icon: "🍇",
+      desc: "ไม้ต้นขนาดกลาง ผลเล็กกลมเป็นพวงคล้ายองุ่นป่า <em>สุกสีม่วงดำ</em> รสเปรี้ยวอมหวาน",
+      props: "ต้านอนุมูลอิสระสูง บำรุงสายตา บำรุงโลหิต ลดคอเลสเตอรอล ชะลอวัย",
+      uses: "ทานผลสด คั้นน้ำ ทำไวน์เม่า แยม น้ำหมากเม่า เครื่องดื่มสุขภาพ",
+      fact: "ของขึ้นชื่อ จ.สกลนคร — มีสารแอนโทไซยานินสูงกว่าผลไม้สีม่วงทั่วไปหลายเท่า"
+    },
+    {
+      id: 10,
+      name_th: "แคนา",
+      name_sci: "Dolichandrone serrulata",
+      icon: "🌼",
+      desc: "ไม้ยืนต้นใบเป็นช่อ ดอกสีขาวรูปแตร<em>บานกลางคืน</em> กลิ่นหอมอ่อนๆ",
+      props: "ดอกแก้ไข้ ดับร้อนใน บำรุงน้ำดี ขับลม บำรุงเลือด แก้ท้องเสีย",
+      uses: "ดอกสดลวกจิ้มน้ำพริก แกงส้มดอกแค ผัดน้ำมันหอย ยำดอกแค",
+      fact: "ดอกแคบานตอนค่ำเพื่อให้ค้างคาวกินน้ำหวานและช่วยผสมเกสร — ตกแล้วเก็บกินตอนเช้า"
+    }
+    // ➕ เพิ่มสมุนไพรอื่นๆ ที่นี่ — copy block ข้างบน เปลี่ยน id เป็นเลขถัดไป
+  ];
+
+  const STORAGE_KEY = "herbHuntQR_v1";
+  let foundIds = new Set();
+  let scanner = null;
+  let lastScannedId = null;
+  let lastScannedAt = 0;
+
+  function loadProgress() {
+    try {
+      const raw = localStorage.getItem(STORAGE_KEY);
+      if (raw) foundIds = new Set(JSON.parse(raw));
+    } catch (e) { foundIds = new Set(); }
+  }
+  function saveProgress() {
+    localStorage.setItem(STORAGE_KEY, JSON.stringify([...foundIds]));
+  }
+
+  function updateProgress() {
+    const n = foundIds.size;
+    const total = herbs.length;
+    document.getElementById("progressText").textContent = `${n}/${total}`;
+    document.getElementById("drawerCount").textContent = `${n}/${total}`;
+    document.getElementById("progressFill").style.width = (n / total * 100) + "%";
+  }
+
+  function renderCollection() {
+    const grid = document.getElementById("grid");
+    grid.innerHTML = "";
+    herbs.forEach(h => {
+      const card = document.createElement("div");
+      const found = foundIds.has(h.id);
+      card.className = "card" + (found ? " found" : "");
+      card.innerHTML = found
+        ? `<div class="emoji">${h.icon}</div><div class="name">${h.name_th}</div>`
+        : `<div class="qmark">?</div><div class="name">???</div>`;
+      if (found) {
+        card.addEventListener("click", () => showHerbModal(h, false));
+      }
+      grid.appendChild(card);
+    });
+  }
+
+  function showHerbModal(h, isNew) {
+    document.getElementById("modalEmoji").textContent = h.icon;
+    document.getElementById("modalName").textContent = h.name_th;
+    document.getElementById("modalSci").textContent = h.name_sci;
+    document.getElementById("modalDesc").innerHTML = h.desc;
+    document.getElementById("modalProps").textContent = h.props;
+    document.getElementById("modalUses").textContent = h.uses;
+    document.getElementById("modalFact").innerHTML = "💡 " + h.fact;
+    const badge = document.getElementById("modalBadge");
+    badge.textContent = isNew ? "🎉 ค้นพบใหม่!" : "✨ ค้นพบแล้ว";
+    badge.style.background = isNew ? "#ffd966" : "#e0e0e0";
+    badge.style.color = isNew ? "#5a3a00" : "#555";
+    document.getElementById("modalOverlay").classList.add("show");
+  }
+
+  function closeModal() {
+    document.getElementById("modalOverlay").classList.remove("show");
+  }
+
+  function showToast(msg, type) {
+    const t = document.getElementById("toast");
+    t.textContent = msg;
+    t.className = "toast show " + (type || "");
+    clearTimeout(t._timer);
+    t._timer = setTimeout(() => t.classList.remove("show"), 2800);
+  }
+
+  function flashScreen() {
+    const f = document.createElement("div");
+    f.className = "reveal-flash";
+    document.body.appendChild(f);
+    setTimeout(() => f.remove(), 700);
+  }
+
+  function setHint(text, isError) {
+    const h = document.getElementById("scanHint");
+    h.textContent = text;
+    h.className = "scan-hint" + (isError ? " error" : "");
+  }
+
+  // ============================================================
+  // QR Scanner
+  // ============================================================
+  function parseHerbId(decodedText) {
+    if (!decodedText) return null;
+    const txt = decodedText.trim();
+    let m = txt.match(/^HERB:(\d+)$/i);
+    if (m) return parseInt(m[1], 10);
+    m = txt.match(/[?&]herb=(\d+)/i);
+    if (m) return parseInt(m[1], 10);
+    m = txt.match(/^(\d+)$/);
+    if (m) return parseInt(m[1], 10);
+    return null;
+  }
+
+  function handleHerbScan(id) {
+    const herb = herbs.find(h => h.id === id);
+    if (!herb) {
+      const now = Date.now();
+      if (lastScannedId !== id || now - lastScannedAt > 3000) {
+        showToast("ไม่พบสมุนไพรหมายเลข " + id + " ในระบบ", "warn");
+        lastScannedId = id;
+        lastScannedAt = now;
+      }
+      return;
+    }
+    const now = Date.now();
+    if (lastScannedId === id && now - lastScannedAt < 3000) return;
+    lastScannedId = id;
+    lastScannedAt = now;
+
+    if (foundIds.has(herb.id)) {
+      showToast("✨ คุณค้นพบ " + herb.name_th + " แล้ว", "success");
+      showHerbModal(herb, false);
+      return;
+    }
+    foundIds.add(herb.id);
+    saveProgress();
+    updateProgress();
+    renderCollection();
+    flashScreen();
+    if (navigator.vibrate) navigator.vibrate([100, 50, 100]);
+    showHerbModal(herb, true);
+  }
+
+  function onScanSuccess(decodedText) {
+    const id = parseHerbId(decodedText);
+    if (!id) return;
+    handleHerbScan(id);
+  }
+
+  function onScanError(err) {
+    // expected — no QR in frame
+  }
+
+  function showCameraError(errMsg) {
+    const wrap = document.getElementById("camera-wrap");
+    wrap.innerHTML = `
+      <div style="color:white;padding:24px;text-align:center;display:flex;flex-direction:column;justify-content:center;align-items:center;height:100%;gap:14px;font-size:0.95rem;line-height:1.5">
+        <div style="font-size:3rem">📷❌</div>
+        <div style="font-weight:700;font-size:1.1rem">เปิดกล้องไม่ได้</div>
+        <div id="errDetail" style="background:rgba(255,255,255,0.15);padding:8px 14px;border-radius:8px;font-family:monospace;font-size:0.8rem;max-width:90%;word-break:break-all">${errMsg}</div>
+        <div style="text-align:left;max-width:340px;background:rgba(255,255,255,0.1);padding:14px 18px;border-radius:12px">
+          <div style="font-weight:700;margin-bottom:8px">วิธีแก้:</div>
+          <div style="margin-bottom:6px">1️⃣ ถ้าเปิดในแอป Line/Facebook → กดเมนู ⋮ → "เปิดในเบราว์เซอร์" (Chrome/Safari)</div>
+          <div style="margin-bottom:6px">2️⃣ ตรวจสอบสิทธิ์กล้อง: ตั้งค่ามือถือ → แอป → เบราว์เซอร์ → สิทธิ์ → กล้อง = อนุญาต</div>
+          <div>3️⃣ รีโหลดหน้านี้แล้วลองใหม่ — กดปุ่ม "อนุญาต" เมื่อเบราว์เซอร์ถาม</div>
+        </div>
+        <button id="retryBtn" style="background:#ffd966;color:#5a3a00;border:0;padding:12px 28px;border-radius:999px;font-family:inherit;font-weight:700;font-size:1rem;cursor:pointer;box-shadow:0 4px 14px rgba(0,0,0,0.25)">🔄 ลองอีกครั้ง</button>
+      </div>
+    `;
+    document.getElementById("retryBtn").addEventListener("click", () => {
+      location.reload();
+    });
+  }
+
+  function startScanner() {
+    // ตรวจว่า browser รองรับ getUserMedia
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      showCameraError("เบราว์เซอร์นี้ไม่รองรับการใช้กล้อง (ลองเปิดใน Chrome/Safari)");
+      return;
+    }
+    if (typeof Html5Qrcode === 'undefined') {
+      showCameraError("โหลด QR library ไม่ได้ — ตรวจสอบอินเทอร์เน็ตแล้วรีโหลด");
+      return;
+    }
+    scanner = new Html5Qrcode("reader", { verbose: false });
+    const config = {
+      fps: 10,
+      qrbox: { width: 240, height: 240 },
+      disableFlip: false
+    };
+    scanner.start(
+      { facingMode: "environment" },
+      config,
+      onScanSuccess,
+      onScanError
+    ).then(() => {
+      setHint("📷 ส่อง QR ที่ป้ายสมุนไพร");
+    }).catch(err => {
+      console.error("Scanner start failed:", err);
+      // ถ้ากล้องหลังเปิดไม่ได้ → ลองกล้องหน้า
+      scanner.start(
+        { facingMode: "user" },
+        config,
+        onScanSuccess,
+        onScanError
+      ).then(() => {
+        setHint("📷 ใช้กล้องหน้า — ส่อง QR");
+      }).catch(err2 => {
+        console.error("Both cameras failed:", err2);
+        const msg = (err && err.message) || (err && err.toString && err.toString()) || (err2 && err2.message) || "Unknown error";
+        showCameraError(msg);
+      });
+    });
+  }
+
+  function setupDrawer() {
+    const drawer = document.getElementById("drawer");
+    const handle = document.getElementById("drawerHandle");
+    handle.addEventListener("click", () => {
+      drawer.classList.toggle("open");
+    });
+  }
+
+  // ============================================================
+  // Init
+  // ============================================================
+  loadProgress();
+  updateProgress();
+  renderCollection();
+  setupDrawer();
+
+  // ตรวจ URL param ?herb=N (สแกน QR ด้วยกล้องมือถือแล้วเปิด link มาที่นี่)
+  let pendingHerbFromUrl = null;
+  const urlMatch = window.location.search.match(/[?&]herb=(\d+)/);
+  if (urlMatch) {
+    pendingHerbFromUrl = parseInt(urlMatch[1], 10);
+    // ข้าม splash screen ไปเลย — เก็บสมุนไพรอัตโนมัติ
+    document.getElementById("permOverlay").style.display = "none";
+    setTimeout(() => {
+      showNoCameraView();
+      setTimeout(() => {
+        handleHerbScan(pendingHerbFromUrl);
+        pendingHerbFromUrl = null;
+      }, 300);
+    }, 100);
+  }
+
+  // โหมดไม่ใช้กล้องในแอป — แทนที่ส่วนกล้องด้วยข้อความ "ใช้กล้องมือถือสแกน"
+  function showNoCameraView() {
+    const wrap = document.getElementById("camera-wrap");
+    wrap.style.background = "linear-gradient(135deg, #6ba84a, #4a7c2e)";
+    wrap.innerHTML = `
+      <div style="color:white;padding:24px;text-align:center;display:flex;flex-direction:column;justify-content:center;align-items:center;height:100%;gap:18px">
+        <div style="font-size:4rem">📱🌿</div>
+        <div style="font-weight:700;font-size:1.2rem">เริ่มล่าสมุนไพรได้เลย!</div>
+        <div style="background:rgba(255,255,255,0.15);padding:16px 20px;border-radius:14px;max-width:340px;text-align:left;line-height:1.7;font-size:0.95rem">
+          <div style="margin-bottom:8px"><strong>1.</strong> เดินไปหาป้ายสมุนไพรในสวน</div>
+          <div style="margin-bottom:8px"><strong>2.</strong> เปิด<strong>กล้องในมือถือ</strong> (Camera) ส่อง QR ที่ป้าย</div>
+          <div><strong>3.</strong> กดลิงค์ที่เด้งขึ้น → เก็บเข้าคอลเลกชันอัตโนมัติ!</div>
+        </div>
+        <button id="openCamInAppBtn" style="background:rgba(255,255,255,0.2);color:white;border:1px solid rgba(255,255,255,0.5);padding:10px 22px;border-radius:999px;font-family:inherit;font-size:0.9rem;cursor:pointer">📷 เปิดกล้องในแอปแทน</button>
+        <div style="font-size:0.8rem;opacity:0.85">เลื่อนสมุดสะสมขึ้นเพื่อดูที่เก็บได้แล้ว ↓</div>
+      </div>
+    `;
+    document.getElementById("openCamInAppBtn").addEventListener("click", () => {
+      // restore camera reader element + try camera
+      wrap.style.background = "#000";
+      wrap.innerHTML = `
+        <div id="reader" style="width:100%;height:100%"></div>
+        <div class="scan-overlay">
+          <div class="scan-frame"><div></div></div>
+          <div class="scan-hint" id="scanHint">📷 ส่อง QR ที่ป้ายสมุนไพร</div>
+        </div>
+      `;
+      startScanner();
+    });
+  }
+
+  document.getElementById("startBtn").addEventListener("click", () => {
+    document.getElementById("permOverlay").style.display = "none";
+    showNoCameraView();
+    if (pendingHerbFromUrl) {
+      setTimeout(() => handleHerbScan(pendingHerbFromUrl), 400);
+      pendingHerbFromUrl = null;
+    }
+  });
+  document.getElementById("startWithCamBtn").addEventListener("click", () => {
+    document.getElementById("permOverlay").style.display = "none";
+    startScanner();
+    if (pendingHerbFromUrl) {
+      setTimeout(() => handleHerbScan(pendingHerbFromUrl), 600);
+      pendingHerbFromUrl = null;
+    }
+  });
+  document.getElementById("modalClose").addEventListener("click", closeModal);
+  document.getElementById("modalOverlay").addEventListener("click", (e) => {
+    if (e.target.id === "modalOverlay") closeModal();
+  });
+  document.getElementById("resetBtn").addEventListener("click", () => {
+    if (confirm("ลบความก้าวหน้าทั้งหมดและเริ่มใหม่?")) {
+      foundIds.clear();
+      saveProgress();
+      updateProgress();
+      renderCollection();
+      lastScannedId = null;
+      showToast("เริ่มเกมใหม่แล้ว", "success");
+    }
+  });
+</script>
+</body>
+</html>
